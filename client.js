@@ -4,28 +4,32 @@ window.__ModuleLoader__.load({
     const React=require('react'),h=React.createElement;
     return {inject:['slots','locale'],apply(ctx) {
       const zh={
-        title:'B站评论助手',intro:'加载本人投稿，勾选需要回复的稿件。加载与选择不会开启自动回复。',
-        login:'扫码登录',logout:'退出登录',check:'检查账号',refresh:'刷新状态',save:'保存所选稿件及规则',
-        preview:'预览回复（不发送）',enable:'确认开启所选稿件自动回复',pause:'立即暂停',
+        title:'B站评论助手',intro:'根据评论内容和本机角色设定，由DSH默认模型生成自然回复；无需关键词规则或固定答案。',
+        login:'扫码登录',logout:'退出登录',check:'检查账号',refresh:'刷新状态',save:'保存稿件及角色设定',
+        preview:'预览真实评论AI回复（不发送）',enable:'确认开启所选稿件自动回复',pause:'立即暂停',
         videos:'选择需要自动回复的投稿',load:'重新加载本人投稿',more:'加载更多投稿',selectAll:'全选已加载稿件',clear:'取消全部选择',
         videoHint:'扫码后自动加载已发布投稿。新增投稿和后续加载的稿件不会自动勾选；全选只针对当前已加载列表。',
         loading:'正在加载本人投稿…',notLoaded:'登录后将自动加载投稿，也可点击重新加载。',noVideos:'当前账号没有可加载的已发布投稿。',
         loaded:'已加载',selected:'已选择',total:'投稿总数',unit:'个',savedSelection:'已保存的回复范围',
         selectedList:'查看所选稿件清单',unknownVideo:'尚未在已加载列表中出现的已保存稿件',cover:'稿件封面',noCover:'暂无封面',
-        selectionLimit:'最多选择或加载1000个稿件，请分批管理。',needSave:'选择或规则已变更，请先保存，再预览或确认开启。',
+        selectionLimit:'最多选择或加载1000个稿件，请分批管理。',needSave:'稿件或角色设定已变更，请先保存，再预览或确认开启。',
         loadingError:'投稿加载失败；不会自动选择或开启回复。',accountChanged:'账号已变化，请重新加载本人投稿并选择回复范围。',
         selectionPaused:'所选稿件已变更，自动回复已暂停；保存后需重新确认开启。',
-        rules:'关键词规则',rulesHint:'按顺序命中第一条；关键词不区分大小写。无匹配且默认回复为空时跳过。',
-        keyword:'关键词',reply:'回复内容',add:'添加规则',remove:'移除',fallback:'默认回复',
-        template:'支持 {user} 和 {title}。开启后仅处理新发布的一级评论，不处理楼中楼。',
+        personaTitle:'AI角色回复',personaName:'角色名称',persona:'角色性格与口吻（仅保存在本机）',
+        personaHint:'只需确定一次角色性格、说话方式和边界，不需要填写任何评论规则或预设答案。模型会根据每条评论生成回复。',
+        model:'DSH默认模型',noModel:'请先配置DSH默认模型',aiToday:'今日模型生成次数',aiLimit:'每日模型生成上限（含预览）',maxChars:'单条AI回复最长字数',
+        privacy:'仅提交稿件标题、评论正文和角色设定给当前默认模型，不提交B站Cookie、用户名、账号编号、私信或聊天历史。预览与试聊也消耗模型额度；模型变化后需重新确认开启。',
+        sample:'试聊人设（不发评论）',sampleInput:'模拟评论',sampleHint:'可先用一条模拟评论看看角色口吻；试聊不需要选择稿件，也不会在B站发言。',
+        sampleResult:'角色试聊结果',sampleSkipped:'角色判断这条评论不适合自动回复，已跳过。',aiDraft:'AI生成草稿',
+        noPersona:'尚未导入角色设定，不能开启自动回复。',
         poll:'轮询间隔（秒）',gap:'发送间隔（秒）',limit:'每日尝试上限（北京时间）',
-        confirm:'我确认仅向下方已保存范围内的所选稿件发送以上规则的回复，了解自动评论可能触发平台限制。',
+        confirm:'我确认提交标题、评论和角色设定给当前DSH默认模型并消耗额度，允许用AI生成结果回复已保存范围内的新评论；理解内容和平台风控风险。',
         off:'已暂停',on:'自动回复中',unknown:'尚未登录',configured:'已保存凭证（加载投稿或检查账号时验证）',
         today:'今日发送尝试',history:'发送记录',empty:'暂无记录',candidates:'预览结果',
-        scope:'每稿最多扫描最近3页；超长回复线程保守跳过。预览包含历史评论，自动回复不会补发历史。',
+        scope:'AI每轮最多生成3次、预览3条，不适合回复的评论可跳过。预览包含历史评论，自动回复仅处理开启后的新评论，不补发历史。',
         waiting:'请用手机B站 → 我的 → 扫一扫',scanned:'已扫码，请在手机上确认',expired:'二维码已过期，请重新生成',ok:'登录成功',
         saved:'设置已保存，自动回复保持暂停；加载投稿和全选均不会自动开启。',
-        note:'每轮最多检查10个所选稿件并轮转，最多发送1条。跳过自己的评论及已有本人回复的线程，发送超时不重试。重启后默认暂停。',
+        note:'每轮最多检查10个所选稿件并轮转，最多发送1条；AI草稿缓存复用。生成失败会暂停，不会退回固定模板。发送超时不重试，重启后默认暂停。',
         qr:'B站登录二维码',account:'登录账号',state:'运行状态',sent:'已发送',uncertain:'结果不确定（不重试）',cancelled:'已取消',
       };
       ctx.locale.register('bili-comment-reply','zh-CN',zh);
@@ -43,6 +47,7 @@ window.__ModuleLoader__.load({
         const [state,setState]=React.useState(null),[form,setForm]=React.useState(null),[busy,setBusy]=React.useState(false);
         const [error,setError]=React.useState(''),[notice,setNotice]=React.useState(''),[qr,setQr]=React.useState(null);
         const [account,setAccount]=React.useState(null),[confirm,setConfirm]=React.useState(false),[preview,setPreview]=React.useState(null);
+        const [sampleComment,setSampleComment]=React.useState('这个角色好可爱，期待更多内容！'),[sampleReply,setSampleReply]=React.useState(null);
         const [catalog,setCatalog]=React.useState({items:[],page:0,total:null,end:false});
         const [catalogBusy,setCatalogBusy]=React.useState(false),[catalogError,setCatalogError]=React.useState('');
         React.useSyncExternalStore(fn=>ctx.locale.subscribe(fn),()=>ctx.locale.getSnapshot());
@@ -89,7 +94,7 @@ window.__ModuleLoader__.load({
           },3000);
           return()=>clearTimeout(timer);
         },[qr]);
-        const change=(key,value)=>{setForm(s=>({...s,[key]:value}));setConfirm(false);setPreview(null);};
+        const change=(key,value)=>{setForm(s=>({...s,[key]:value}));setConfirm(false);setPreview(null);setSampleReply(null);};
         async function updateSelection(ids) {
           const next=[...new Set(ids)];
           if(next.length>1000){setError(t('selectionLimit'));return;}
@@ -113,9 +118,10 @@ window.__ModuleLoader__.load({
               catalogRequest.current++;catalogMid.current=null;setCatalogBusy(false);setAccount(null);setQr(null);
               setCatalog({items:[],page:0,total:null,end:false});setCatalogError('');change('bvids',[]);
             }else if(action==='preview')setPreview(value);
-            else if(action==='configure'){setForm(value.settings);setNotice(t('saved'));setConfirm(false);setPreview(null);}
-            const s=await api('status');if(alive.current)setState(s);
-          }catch(e){if(alive.current)setError(e.message);}
+            else if(action==='sample')setSampleReply(value);
+            else if(action==='configure'){setForm(value.settings);setNotice(t('saved'));setConfirm(false);setPreview(null);setSampleReply(null);}
+            const s=await api('status');if(alive.current){setState(s);if(JSON.stringify(s.model)!==JSON.stringify(state?.model))setConfirm(false);}
+          }catch(e){if(alive.current){setError(e.message);if(action==='enable')setConfirm(false);}}
           finally {if(alive.current)setBusy(false);}
         }
         const button=(key,action,disabled=false)=>h('button',{type:'button',disabled,onClick:action},t(key));
@@ -147,16 +153,22 @@ window.__ModuleLoader__.load({
             catalog.page>0&&!catalog.end&&h('div',{className:'bcr-row'},button('more',()=>loadSubmissions(catalog.page+1),blocked||catalog.items.length>=1000)),
             catalog.items.length>=1000&&!catalog.end&&h('p',null,t('selectionLimit')),
             !!selected.size&&h('details',null,h('summary',null,`${t('selectedList')}（${selected.size}）`),h('ul',{className:'bcr-selected-list'},...[...selected].map(id=>h('li',{key:id},titleOf(id)))))),
-          form&&h('div',{className:'bcr-card'},h('h3',null,t('rules')),h('small',null,t('rulesHint')),
-            ...form.rules.map((rule,i)=>h('div',{className:'bcr-rule',key:i},h('input',{'aria-label':`${t('keyword')} ${i+1}`,placeholder:t('keyword'),value:rule.keyword,onChange:e=>change('rules',form.rules.map((v,j)=>j===i?{...v,keyword:e.target.value}:v))}),h('textarea',{'aria-label':`${t('reply')} ${i+1}`,placeholder:t('reply'),value:rule.reply,onChange:e=>change('rules',form.rules.map((v,j)=>j===i?{...v,reply:e.target.value}:v))}),button('remove',()=>change('rules',form.rules.filter((_,j)=>j!==i)),blocked))),
-            button('add',()=>change('rules',[...form.rules,{keyword:'',reply:''}]),form.rules.length>=30||blocked),
-            field('fallback',h('textarea',{'aria-label':t('fallback'),value:form.fallbackReply,maxLength:500,onChange:e=>change('fallbackReply',e.target.value)}),'template'),
-            h('div',{className:'bcr-grid'},...['pollSeconds','gapSeconds','dailyLimit'].map((key,i)=>field(['poll','gap','limit'][i],h('input',{type:'number','aria-label':t(['poll','gap','limit'][i]),min:[60,30,1][i],max:[3600,3600,100][i],value:form[key],onChange:e=>change(key,Number(e.target.value))})))),
-            h('div',{className:'bcr-row'},button('save',()=>run('configure',form),blocked),button('preview',()=>run('preview'),blocked||dirty||!savedIds.length)),
+          form&&h('div',{className:'bcr-card'},h('h3',null,t('personaTitle')),
+            field('personaName',h('input',{'aria-label':t('personaName'),value:form.personaName||'',maxLength:80,onChange:e=>change('personaName',e.target.value)})),
+            field('persona',h('textarea',{'aria-label':t('persona'),value:form.persona||'',maxLength:6000,rows:6,onChange:e=>change('persona',e.target.value)}),'personaHint'),
+            !form.persona?.trim()&&h('p',null,t('noPersona')),
+            h('p',null,`${t('model')}：${state?.model?.provider&&state?.model?.model?`${state.model.provider} / ${state.model.model}`:t('noModel')}`),
+            h('p',null,`${t('aiToday')}：${state?.todayGenerations??0} / ${state?.settings?.aiDailyLimit??40}`),
+            h('p',null,t('privacy')),
+            h('div',{className:'bcr-grid'},...['pollSeconds','gapSeconds','dailyLimit','maxReplyChars','aiDailyLimit'].map((key,i)=>field(['poll','gap','limit','maxChars','aiLimit'][i],h('input',{type:'number','aria-label':t(['poll','gap','limit','maxChars','aiLimit'][i]),min:[60,30,1,20,1][i],max:[3600,3600,100,300,200][i],value:form[key],onChange:e=>change(key,Number(e.target.value))})))),
+            h('div',{className:'bcr-row'},button('save',()=>run('configure',{...form,replyMode:'persona'}),blocked),button('preview',()=>run('preview'),blocked||dirty||!savedIds.length||!state?.settings?.persona?.trim())),
             dirty&&h('p',{role:'status'},t('needSave')),
-            h('p',null,`${t('savedSelection')}：${savedIds.length} ${t('unit')}`),
-            h('label',{className:'bcr-consent'},h('input',{type:'checkbox',checked:confirm,disabled:dirty||!savedIds.length||blocked,onChange:e=>setConfirm(e.target.checked)}),t('confirm')),
-            h('div',{className:'bcr-row'},button('enable',()=>run('enable',{confirmSelection:true,bvids:savedIds,settings:state.settings}),blocked||!confirm||!state?.credentialConfigured||dirty||!savedIds.length)),h('p',null,t('note'))),
+            field('sampleInput',h('textarea',{'aria-label':t('sampleInput'),value:sampleComment,maxLength:2000,onChange:e=>{setSampleComment(e.target.value);setSampleReply(null);}}),'sampleHint'),
+            h('div',{className:'bcr-row'},button('sample',()=>run('sample',{comment:sampleComment}),blocked||dirty||state?.enabled||!state?.settings?.persona?.trim()||!sampleComment.trim())),
+            h('p',null,`${t('savedSelection')}：${savedIds.length} ${t('unit')}；${t('personaName')}：${state?.settings?.personaName||'—'}`),
+            h('label',{className:'bcr-consent'},h('input',{type:'checkbox',checked:confirm,disabled:dirty||!savedIds.length||blocked||!state?.settings?.persona?.trim(),onChange:e=>setConfirm(e.target.checked)}),t('confirm')),
+            h('div',{className:'bcr-row'},button('enable',()=>run('enable',{confirmSelection:true,confirmAI:true,bvids:savedIds,settings:state.settings,model:state.model}),blocked||!confirm||!state?.credentialConfigured||dirty||!savedIds.length||!state?.settings?.persona?.trim())),h('p',null,t('note'))),
+          sampleReply&&h('div',{className:'bcr-card'},h('h3',null,t('sampleResult')),h('p',null,sampleReply.action==='skip'?t('sampleSkipped'):sampleReply.reply)),
           preview&&h('div',{className:'bcr-card'},h('h3',null,t('candidates')),h('p',null,t('scope')),preview.candidates?.length?preview.candidates.map(c=>h('div',{className:'bcr-item',key:c.key},h('strong',null,`${c.user} · ${c.bvid}`),h('p',null,c.comment),h('p',null,`→ ${c.reply}`))):h('p',null,preview.skipped||t('empty'))),
           h('div',{className:'bcr-card'},h('h3',null,t('history')),state?.history?.length?state.history.map(r=>h('div',{className:'bcr-item',key:r.key},h('strong',null,`${r.bvid} · ${t(r.status)}`),h('small',null,` · ${new Date(r.at).toLocaleString('zh-CN',{hour12:false})}`),h('p',null,r.reply))):h('p',null,t('empty'))));
       }

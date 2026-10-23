@@ -7,11 +7,21 @@ import {DEFAULT_SETTINGS} from './engine.js';
 import {BiliApi} from './bili-api.js';
 
 async function fixture({authorized=false}={}) {
-  let value=structuredClone(DEFAULT_SETTINGS),closed=false,route,tool,service;
-  const disposers=[],rows=new Map();
+  let value,closed=false,route,tool,service;
+  const disposers=[],tables=new Map();
   const ctx={
     credentials:{resolve:async()=>authorized?{value:'SESSDATA=fixture-only; bili_jct=fixture-only; DedeUserID=42; DedeUserID__ckMd5=fixture-only'}:undefined,describe:async()=>({configured:authorized}),unset:async()=>{}},
-    storageDomain:{open:async spec=>{assert.equal(spec.name,'bili_comment_reply');assert.match(spec.name,/^[a-z][a-z0-9_]*$/);return {global:{get:()=>value,set:async v=>{value=spec.global.schema.parse(v);}},table:()=>({get:k=>rows.get(k),entries:()=>rows.entries(),put:async(k,v)=>rows.set(k,v)}),close:async()=>{closed=true;}};}},
+    agentDefaultModel:{currentSelection:()=>({provider:'fixture-provider',model:'fixture-model'})},
+    llm:{prepareCall:async config=>({config,stream:async function*(){yield {type:'text-delta',index:0,text:JSON.stringify({action:'reply',reply:'通用测试草稿'})};yield {type:'finish',reason:{kind:'stop'}};}})},
+    storageDomain:{open:async spec=>{
+      assert.equal(spec.name,'bili_comment_reply');assert.match(spec.name,/^[a-z][a-z0-9_]*$/);
+      assert.equal(spec.version,2);assert.deepEqual(spec.compatibleVersions,[1]);
+      value=spec.global.schema.parse(structuredClone(spec.global.initial));
+      return {global:{get:()=>value,set:async v=>{value=spec.global.schema.parse(v);}},table:name=>{
+        assert.ok(spec.tables[name]);if(!tables.has(name))tables.set(name,new Map());const rows=tables.get(name);
+        return {get:k=>rows.get(k),entries:()=>rows.entries(),put:async(k,v)=>rows.set(k,spec.tables[name].valueSchema.parse(v))};
+      },close:async()=>{closed=true;}};
+    }},
     connection:{fetch:{register:r=>{route=r;return async()=>{};}}},
     tools:{register:t=>{tool=t;return ()=>{};}},
     provide:(name,s)=>{assert.equal(name,'biliCommentReply');service=s;},
@@ -42,7 +52,7 @@ test('插件可加载；Host入口与工具共用业务方法，默认未授权/
 test('配置通过UI/工具均持久化相同状态，错误不伪装成功',async()=>{
   const f=await fixture();
   try {
-    const settings={...DEFAULT_SETTINGS,bvids:['BV1234567890'],fallbackReply:'谢谢 {user}'};
+    const settings={...DEFAULT_SETTINGS,replyMode:'template',bvids:['BV1234567890'],fallbackReply:'谢谢 {user}'};
     const ui=(await (await f.route.fetch(request('configure',settings))).json()).value;
     const tool=await f.tool.execute({action:'configure',settings});
     assert.deepEqual(ui.settings,tool.settings);assert.equal(tool.enabled,false);
@@ -89,7 +99,7 @@ test('开启必须由用户确认精确已保存范围，不能用加载或旧�
   const f=await fixture({authorized:true});
   try {
     const bvids=['BV1234567890'];
-    await f.tool.execute({action:'configure',settings:{...DEFAULT_SETTINGS,bvids,fallbackReply:'谢谢'}});
+    await f.tool.execute({action:'configure',settings:{...DEFAULT_SETTINGS,replyMode:'template',bvids,fallbackReply:'谢谢'}});
     assert.equal((await f.route.fetch(request('enable'))).status,400);
     assert.equal((await f.route.fetch(request('enable',{confirmSelection:true,bvids:[]}))).status,400);
     assert.equal((await f.tool.execute({action:'status'})).enabled,false);

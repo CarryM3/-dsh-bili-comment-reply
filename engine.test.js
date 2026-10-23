@@ -16,7 +16,7 @@ const comment = (overrides = {}) => ({
 
 function fixture(t, settings = {}) {
   let clock = NOW;
-  let saved = validateSettings({ bvids: [BVID], fallbackReply: '谢谢{user}，欢迎观看{title}', ...settings });
+  let saved = validateSettings({ replyMode: 'template', bvids: [BVID], fallbackReply: '谢谢{user}，欢迎观看{title}', ...settings });
   const receipts = new Map();
   const events = [];
   const store = {
@@ -70,6 +70,10 @@ test('配置验证拒绝非法 BV、非法轮询/发送间隔，接受合法边�
   }
   assert.deepEqual(validateSettings({ bvids: [BVID, BVID] }).bvids, [BVID]);
   assert.deepEqual(validateSettings({}), DEFAULT_SETTINGS);
+  assert.equal(DEFAULT_SETTINGS.replyMode, 'persona');
+  assert.equal(DEFAULT_SETTINGS.persona, '');
+  assert.equal(DEFAULT_SETTINGS.maxReplyChars, 180);
+  assert.equal(DEFAULT_SETTINGS.aiDailyLimit, 40);
 });
 
 test('非本人稿件不能开启；运行时所有权变化则拒绝并暂停', async t => {
@@ -124,12 +128,13 @@ test('配置落库期间不能并发开启或覆盖配置，持久化失败后�
 });
 test('关键词按配置顺序首次命中、忽略大小写，模板单遍替换与回退', () => {
   const settings = validateSettings({
+    replyMode: 'template',
     rules: [{ keyword: ' TEST ', reply: '第一:{user}:{title}:{other}' }, { keyword: 'test评论', reply: '第二' }],
     fallbackReply: '默认:{user}',
   });
   assert.equal(selectReply(settings, comment({ message: 'TeSt评论', name: '{title}' }), { title: '{user}' }), '第一:{title}:{user}:{other}');
   assert.equal(selectReply(settings, comment(), { title: '作品' }), '默认:读者');
-  assert.equal(selectReply(validateSettings({}), comment(), { title: '作品' }), '');
+  assert.equal(selectReply(validateSettings({ replyMode: 'template' }), comment(), { title: '作品' }), '');
   assert.equal(selectReply({ ...settings, fallbackReply: '{title}' }, comment(), { title: '字'.repeat(600) }).length, 500);
 });
 
@@ -296,7 +301,7 @@ for (const action of ['pause', 'dispose', 'configure']) {
     const enabling = f.engine.enable();
     const rejected = assert.rejects(enabling, /开启操作已取消/);
     await entered.promise;
-    if (action === 'configure') await f.engine.configure({ bvids: [BVID], fallbackReply: '新配置' });
+    if (action === 'configure') await f.engine.configure({ replyMode: 'template', bvids: [BVID], fallbackReply: '新配置' });
     else f.engine[action]();
     release.resolve();
     await rejected;
@@ -318,14 +323,14 @@ test('占位持久化失败不得发送，并暂停引擎', async t => {
 test('configure 成功或验证失败都先暂停，成功后必须重新开启', async t => {
   const f = fixture(t);
   await f.engine.enable();
-  await f.engine.configure({ bvids: [BVID], fallbackReply: '更新后的回复' });
+  await f.engine.configure({ replyMode: 'template', bvids: [BVID], fallbackReply: '更新后的回复' });
   assert.equal(f.engine.status().enabled, false);
   assert.equal(f.engine.settings.fallbackReply, '更新后的回复');
   assert.equal(f.store.saveSettings.mock.callCount(), 1);
   await f.engine.run(true);
   assertNoSend(f);
   await f.engine.enable();
-  await assert.rejects(f.engine.configure({ gapSeconds: 1 }), /发送间隔/);
+  await assert.rejects(f.engine.configure({ replyMode: 'template', gapSeconds: 1 }), /发送间隔/);
   assert.equal(f.engine.status().enabled, false);
   assert.equal(f.store.saveSettings.mock.callCount(), 1);
 });
@@ -338,7 +343,7 @@ test('configure 在任务执行中仍先暂停，拒绝修改并拦截待发送�
   await f.engine.enable();
   const running = f.engine.run(true);
   await entered.promise;
-  await assert.rejects(f.engine.configure({}), /任务执行中/);
+  await assert.rejects(f.engine.configure({ replyMode: 'template' }), /任务执行中/);
   assert.equal(f.engine.status().enabled, false);
   release.resolve();
   assert.deepEqual(await running, { paused: true });

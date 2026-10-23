@@ -1,9 +1,9 @@
 {
   "name": "@local/dsh-bili-comment-reply",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
-  "description": "B站评论助手：自动加载本人投稿、标题封面勾选、独立确认自动回复、去重限速",
+  "description": "B站角色AI评论助手：根据评论及本机人设生成回复，使用DSH默认模型，无需关键词模板",
   "exports": {
     ".": "./host.js",
     "./host": "./host.js",
@@ -17,6 +17,7 @@
     "client.js",
     "engine.js",
     "bili-api.js",
+    "persona-generator.js",
     "cordis.patch.yml",
     "locale/*.json",
     "README.md"
@@ -31,7 +32,7 @@
   },
   "scripts": {
     "test": "node --test *.test.js",
-    "check": "node --check host.js && node --check index.js && node --check engine.js && node --check client.js && node --check bili-api.js"
+    "check": "node --check host.js && node --check index.js && node --check engine.js && node --check client.js && node --check bili-api.js && node --check persona-generator.js"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
