@@ -28,6 +28,116 @@ function mock(...responses) {
 const rawComment = '{"rpid":9007199254740993123,"mid":42,"member":{"mid":"42","uname":"用户"},"content":{"message":"保留 9007199254740993123 与 \\\"rpid\\\":9007199254740993123"},"ctime":1700000000,"rcount":3}';
 const expected = { id: '9007199254740993123', mid: '42', name: '用户', message: '保留 9007199254740993123 与 "rpid":9007199254740993123', ctime: 1700000000, replyCount: 3 };
 
+// 社区文档真实层级：data.arc_audits[].Archive 与 data.page.{pn,ps,count}。
+const archive = (overrides = {}) => ({ Archive: {
+  aid: 1906473802, bvid: 'BV1MU411S7iJ', mid: 0,
+  title: 'Linux小寄巧: 原地卸载内核然后尝试救活!',
+  cover: '//i0.hdslb.com/bfs/archive/b76c0b574862f5a8e8eb133f5f33fcbcd602401a.jpg', ...overrides,
+}, Videos: null, stat: { aid: 1906473802 }, state_panel: 0 });
+const submissionsData = (items = [archive()], pn = 1, count = 21) => ({
+  class: null, arc_audits: items, page: { pn, ps: 20, count }, play_type: 1,
+});
+
+test('submissions 使用 Cookie 本人创作中心已发布筛选，不接收 mid、不请求公开空间', async () => {
+  const { api, calls } = mock(response(submissionsData()));
+  const result = await api.submissions(`${cookie}; other=secret`);
+  assert.deepEqual(result, {
+    items: [{ aid: '1906473802', bvid: 'BV1MU411S7iJ', title: archive().Archive.title,
+      cover: 'https://i0.hdslb.com/bfs/archive/b76c0b574862f5a8e8eb133f5f33fcbcd602401a.jpg' }],
+    page: 1, pageSize: 20, total: 21, end: false,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url.origin, 'https://member.bilibili.com');
+  assert.equal(calls[0].url.pathname, '/x/web/archives');
+  assert.deepEqual(Object.fromEntries(calls[0].url.searchParams), { status: 'pubed', pn: '1', ps: '20', coop: '1', interactive: '1' });
+  assert.equal(calls[0].init.headers.Cookie, cookie);
+  assert.equal(calls[0].init.headers.Referer, 'https://member.bilibili.com/');
+  assert.equal(calls[0].init.method, 'GET');
+  assert.equal(calls[0].init.redirect, 'error');
+});
+test('submissions 多稿件数字/字符串 ID 与 BV 前缀归一化，标题纯文本，必需字段始终存在', async () => {
+  const { api } = mock(response(submissionsData([
+    archive({ aid: '1956170305', bvid: ' bv1Ay411i7Ph ', mid: '42', title: '<em>标题</em>\u0000 &amp; 文字', cover: undefined }),
+    archive({ aid: 910326709, bvid: 'BV1GM4y1a7Vn', mid: 43, cover: null }),
+  ], 2, 22)));
+  assert.deepEqual(await api.submissions(cookie, 2), {
+    items: [
+      { aid: '1956170305', bvid: 'BV1Ay411i7Ph', title: '标题 &amp; 文字', cover: '', ownerMid: '42' },
+      { aid: '910326709', bvid: 'BV1GM4y1a7Vn', title: archive().Archive.title, cover: '', ownerMid: '43' },
+    ], page: 2, pageSize: 20, total: 22, end: true,
+  });
+});
+test('submissions 原始 JSON 超大 aid/mid 跨分页无损且不改写标题数字', async () => {
+  const raw = pn => `{"code":0,"data":{"arc_audits":[{"Archive":{"aid":9007199254740993123,"bvid":"BV1MU411S7iJ","mid":9007199254740993125,"title":"9007199254740993123","cover":""}}],"page":{"pn":${pn},"ps":20,"count":21}}}`;
+  const { api, calls } = mock(response(null, { raw: raw(1) }), response(null, { raw: raw(2) }));
+  for (const page of [1, 2]) {
+    const result = await api.submissions(cookie, page);
+    assert.equal(result.items[0].aid, '9007199254740993123');
+    assert.equal(result.items[0].ownerMid, '9007199254740993125');
+    assert.equal(result.items[0].title, '9007199254740993123');
+    assert.equal(result.end, page === 2);
+    assert.equal(calls[page - 1].url.searchParams.get('pn'), String(page));
+  }
+});
+test('submissions 空数组与 null 列表是终页', async () => {
+  for (const items of [[], null]) {
+    const { api } = mock(response(submissionsData(items, 1, 0)));
+    assert.deepEqual(await api.submissions(cookie), { items: [], page: 1, pageSize: 20, total: 0, end: true });
+  }
+});
+test('submissions 非法结构、分页及必需字段拒绝，不伪装成空列表', async () => {
+  for (const data of [null, {}, [], { page: { pn: 1, ps: 20, count: 0 } },
+    submissionsData({}), { ...submissionsData(), page: null },
+    { ...submissionsData(), page: { pn: 2, ps: 20, count: 21 } },
+    { ...submissionsData(), page: { pn: 1, ps: 10, count: 21 } },
+    { ...submissionsData(), page: { pn: 1, ps: 20, count: -1 } },
+    submissionsData([{}]), submissionsData([archive({ aid: 0 })]),
+    submissionsData([archive({ aid: '1e5' })]), submissionsData([archive({ bvid: 'bad' })]),
+    submissionsData([archive({ title: null })]), submissionsData([archive({ mid: -1 })]),
+    submissionsData(Array.from({ length: 21 }, () => archive())),
+  ]) {
+    const { api, calls } = mock(response(data));
+    await assert.rejects(api.submissions(cookie), BiliApiError);
+    assert.equal(calls.length, 1);
+  }
+});
+test('submissions 缺少登录或分页参数错误时零请求', async () => {
+  const { api, calls } = mock();
+  for (const value of [undefined, null, '', 'DedeUserID=42']) await assert.rejects(api.submissions(value), { kind: 'not-logged-in' });
+  for (const page of [0, -1, 1.5, '2', { mid: '42' }, Number.MAX_SAFE_INTEGER + 1]) await assert.rejects(api.submissions(cookie, page), { kind: 'invalid-page' });
+  await assert.rejects(api.submissions('SESSDATA=secret\r\nheader=x'), { kind: 'invalid-cookie' });
+  assert.equal(calls.length, 0);
+});
+test('submissions 登录失效、风控、网络与非法响应均脱敏失败且不重试或回退', async () => {
+  for (const res of [response(null, { code: -101 }), response(null, { code: -412 }), response(null, { code: -509 }),
+    response({ need_captcha: true }), response({ gaia_res_type: 1 }), response({ v_voucher: cookie }),
+    response(null, { status: 403 }), response(null, { raw: cookie }), new Error(cookie),
+  ]) {
+    const { api, calls } = mock(res);
+    await assert.rejects(api.submissions(cookie), error => error instanceof BiliApiError
+      && !error.stack.includes('session%2Cvalue') && !JSON.stringify(error).includes('csrf-token') && error.cause === undefined);
+    assert.equal(calls.length, 1);
+  }
+});
+test('submissions cover 只保留 hdslb 图片 HTTPS，兼容协议相对和 HTTP', async () => {
+  const good = [
+    ['https://i0.hdslb.com/bfs/archive/a.jpg', 'https://i0.hdslb.com/bfs/archive/a.jpg'],
+    ['//i1.hdslb.com/bfs/archive/a.png', 'https://i1.hdslb.com/bfs/archive/a.png'],
+    ['http://i2.hdslb.com/bfs/archive/a.webp', 'https://i2.hdslb.com/bfs/archive/a.webp'],
+    ['https://i0.hdslb.com/bfs/archive/a.jpg@320w_200h.webp', 'https://i0.hdslb.com/bfs/archive/a.jpg@320w_200h.webp'],
+  ];
+  const bad = ['', undefined, null, {}, '/bfs/archive/a.jpg', 'not a url', 'javascript:alert(1)',
+    'data:image/png;base64,x', 'https://evil.test/a.jpg', 'https://hdslb.com.evil.test/a.jpg',
+    'https://evilhdslb.com/a.jpg', 'https://i0.hdslb.com@evil.test/a.jpg',
+    'https://user:password@i0.hdslb.com/a.jpg', 'https://i0.hdslb.com:444/a.jpg',
+    'ftp://i0.hdslb.com/a.jpg', 'https://i0.hdslb.com/a.svg', 'https://i0.hdslb.com/a.html',
+    'https://i0.hdslb.com/a.jpg\n', 'https://i0.hdslb.com\\@evil.test/a.jpg'];
+  for (const [cover, expectedCover] of [...good, ...bad.map(value => [value, ''])]) {
+    const { api } = mock(response(submissionsData([archive({ cover })])));
+    assert.equal((await api.submissions(cookie)).items[0].cover, expectedCover, String(cover));
+  }
+});
+
 test('扫码申请只返回展示必需信息，使用正确路径且禁止重定向', async () => {
   const { api, calls } = mock(response({ qrcode_key: 'key', url: 'https://passport.bilibili.com/h5-app/passport/login/scan?qrcode_key=key', refresh_token: 'secret' }));
   assert.deepEqual(await api.startQR(), { status: 'waiting', key: 'key', url: 'https://passport.bilibili.com/h5-app/passport/login/scan?qrcode_key=key' });

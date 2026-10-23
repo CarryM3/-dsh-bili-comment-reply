@@ -6,7 +6,7 @@ export function validateSettings(input) {
   const allowed = Object.keys(DEFAULT_SETTINGS);
   if (Object.keys(input).some(k => !allowed.includes(k))) throw new Error('包含不支持的设置字段');
   const s = {...DEFAULT_SETTINGS, ...input};
-  if (!Array.isArray(s.bvids) || s.bvids.length > 10 || s.bvids.some(v => typeof v !== 'string' || !/^BV[0-9A-Za-z]{10}$/.test(v))) throw new Error('请填写最多10个有效BV号');
+  if (!Array.isArray(s.bvids) || s.bvids.length > 1000 || s.bvids.some(v => typeof v !== 'string' || !/^BV[0-9A-Za-z]{10}$/.test(v))) throw new Error('请选择最多1000个有效BV号');
   s.bvids = [...new Set(s.bvids)];
   if (!Array.isArray(s.rules) || s.rules.length > 30) throw new Error('关键词规则最多30条');
   const validReply = v => typeof v === 'string' && v.trim().length > 0 && v.length <= 500 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(v);
@@ -31,7 +31,7 @@ export function selectReply(s, comment, video) {
 export class ReplyEngine {
   constructor({api, getCookie, store, now=Date.now}) {
     Object.assign(this,{api,getCookie,store,now});
-    this.enabled=false; this.busy=false; this.disposed=false; this.since=0; this.message=''; this.lastRun=null; this.epoch=0; this.configuring=false;
+    this.enabled=false; this.busy=false; this.disposed=false; this.since=0; this.message=''; this.lastRun=null; this.epoch=0; this.configuring=false; this.scanOffset=0;
     this.settings=validateSettings(store.settings());
   }
   status() {
@@ -63,7 +63,10 @@ export class ReplyEngine {
     const epoch=this.epoch;
     try {
       const {cookie,account}=await this.identity();
-      for(const bvid of this.settings.bvids) await this.ownedVideo(bvid,cookie,account);
+      for(const bvid of this.settings.bvids) {
+        if(this.disposed || epoch!==this.epoch) throw new Error('开启操作已取消');
+        await this.ownedVideo(bvid,cookie,account);
+      }
       if(this.disposed || epoch!==this.epoch) throw new Error('开启操作已取消');
     } catch(error) {
       if(epoch===this.epoch) this.pause(error instanceof Error?error.message:'开启失败');
@@ -94,7 +97,10 @@ export class ReplyEngine {
     try {
       const {cookie,account}=await this.identity();
       const settings=structuredClone(this.settings), candidates=[];
-      for(const bvid of settings.bvids) {
+      const ordered=send?settings.bvids.slice(this.scanOffset).concat(settings.bvids.slice(0,this.scanOffset)).slice(0,10):settings.bvids;
+      for(const bvid of ordered) {
+        if(send && (!this.enabled || this.disposed)) return {paused:true};
+        if(send) this.scanOffset=(settings.bvids.indexOf(bvid)+1)%settings.bvids.length;
         const video=await this.ownedVideo(bvid,cookie,account);
         // 每轮读取各稿件最近3页一级评论；不是全量历史爬取。
         for(let page=1;page<=3;page++) {

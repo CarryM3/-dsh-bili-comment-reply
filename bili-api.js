@@ -96,6 +96,43 @@ function comment(item) {
     replyCount: number(item.rcount ?? item.count ?? 0),
   };
 }
+// 只允许 B站图片 CDN；无效封面不影响稿件展示，也不向外部域发送请求。
+function submissionCover(value) {
+  if (typeof value !== 'string' || !value || /[\s\\\x00-\x1f\x7f]/.test(value)) return '';
+  let url;
+  try { url = new URL(value.startsWith('//') ? `https:${value}` : value); } catch { return ''; }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port
+    || !(url.hostname === 'hdslb.com' || url.hostname.endsWith('.hdslb.com'))
+    || !/\.(?:jpe?g|png|gif|webp|avif)(?:@[^/]*)?$/i.test(url.pathname)) return '';
+  url.protocol = 'https:';
+  return url.href;
+}
+function submission(item) {
+  const archive = item?.Archive;
+  if (!archive || typeof archive !== 'object' || Array.isArray(archive)) fail('invalid-response');
+  const bvid = string(archive.bvid).trim().replace(/^bv/i, 'BV');
+  if (!/^BV[0-9A-Za-z]{10}$/.test(bvid)) fail('invalid-response');
+  const result = {
+    aid: id(archive.aid), bvid,
+    title: string(archive.title).replace(/<[^>]*>/g, '').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ''),
+    cover: submissionCover(archive.cover),
+  };
+  // 部分创作中心接口 mid 是占位 0；不把它当成归属证明。
+  if (archive.mid != null && archive.mid !== 0 && archive.mid !== '0') result.ownerMid = id(archive.mid);
+  return result;
+}
+function submissionListing(data, requestedPage) {
+  if (data?.need_captcha || data?.gaia_res_type || data?.v_voucher) fail('risk-control');
+  if (!data || typeof data !== 'object' || !Object.hasOwn(data, 'arc_audits')
+    || (data.arc_audits !== null && !Array.isArray(data.arc_audits)) || !data.page) fail('invalid-response');
+  const page = number(data.page.pn);
+  const pageSize = number(data.page.ps);
+  const total = number(data.page.count);
+  if (page !== requestedPage || pageSize !== 20) fail('invalid-response');
+  const items = (data.arc_audits ?? []).map(submission);
+  if (items.length > pageSize) fail('invalid-response');
+  return { items, page, pageSize, total, end: items.length === 0 || BigInt(page) * BigInt(pageSize) >= BigInt(total) };
+}
 function listing(data, requestedPage) {
   if (!data || (data.replies != null && !Array.isArray(data.replies))) fail('invalid-response');
   const comments = (data.replies ?? []).map(comment);
@@ -116,10 +153,10 @@ export class BiliApi {
     this.#fetch = fetchImpl;
     this.#timeoutMs = timeoutMs;
   }
-  async #request(origin, path, { query, cookie, form } = {}) {
+  async #request(origin, path, { query, cookie, form, referer = 'https://www.bilibili.com/' } = {}) {
     const url = new URL(path, origin);
     if (query) url.search = new URLSearchParams(query).toString();
-    const headers = { Accept: 'application/json', Referer: 'https://www.bilibili.com/' };
+    const headers = { Accept: 'application/json', Referer: referer };
     if (cookie !== undefined) headers.Cookie = cookieHeader(cookieParts(cookie));
     if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded';
     const controller = new AbortController();
@@ -169,6 +206,21 @@ export class BiliApi {
     const { data } = await this.#request(API, '/x/web-interface/nav', { cookie });
     if (data?.isLogin !== true) fail('not-logged-in');
     return { mid: id(data.mid), name: string(data.uname) };
+  }
+  /** 当前 Cookie 账号的已发布稿件；不接收 mid，不重试或回退公开空间接口。
+   * 参数/结构依据：https://github.com/lovegaoshi/NoxPlayer/issues/8
+   * Archive/page 字段：https://github.com/bilibili-plugins/bilibili-api-collect/blob/master/docs/creativecenter/videos.md
+   * 仅列出用于选择；Host 开启回复时仍须独立验证归属。
+   */
+  async submissions(cookie, page = 1) {
+    pageNumber(page);
+    if (cookie == null || cookie === '') fail('not-logged-in');
+    if (!cookieParts(cookie).has('SESSDATA')) fail('not-logged-in');
+    const { data } = await this.#request('https://member.bilibili.com', '/x/web/archives', {
+      cookie, referer: 'https://member.bilibili.com/',
+      query: { status: 'pubed', pn: page, ps: 20, coop: 1, interactive: 1 },
+    });
+    return submissionListing(data, page);
   }
   async video(bvid, cookie) {
     if (typeof bvid !== 'string' || !/^BV[0-9A-Za-z]{10}$/.test(bvid)) fail('invalid-bvid');
