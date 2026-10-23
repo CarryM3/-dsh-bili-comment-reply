@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.tgz
+*.zip
+.DS_Store
+Thumbs.db
+coverage/
+credentials/
+*credential*.json
+bili_credential.json

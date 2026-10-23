@@ -1,0 +1,4 @@
+- insert:
+    - id: bili-comment-reply
+      name: '@local/dsh-bili-comment-reply'
+      config: {}

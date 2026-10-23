@@ -1,0 +1,15 @@
+{
+  "name": "@local/dsh-bili-comment-reply",
+  "version": "1.0.3",
+  "private": true,
+  "type": "module",
+  "description": "B站本人稿件评论助手：扫码登录、关键词规则、去重限速、安全暂停",
+  "exports": {".": "./host.js", "./host": "./host.js", "./client": "./client.js", "./package.json": "./package.json", "./locale/*.json": "./locale/*.json"},
+  "files": ["host.js", "index.js", "client.js", "engine.js", "bili-api.js", "cordis.patch.yml", "locale/*.json", "README.md"],
+  "repository": {"type": "git", "url": "git+https://github.com/CarryM3/-dsh-bili-comment-reply.git"},
+  "homepage": "https://github.com/CarryM3/-dsh-bili-comment-reply#readme",
+  "bugs": {"url": "https://github.com/CarryM3/-dsh-bili-comment-reply/issues"},
+  "scripts": {"test": "node --test *.test.js", "check": "node --check host.js && node --check index.js && node --check engine.js && node --check client.js && node --check bili-api.js"},
+  "dependencies": {"qrcode": "^1.5.4", "zod": "^4.0.0"},
+  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}, "client": {"platform": "web", "immediately": true, "inject": ["@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-locale"]}}
+}
