@@ -19,8 +19,15 @@ const DRAFT_SCHEMA=z.object({at:z.number(),day:z.string(),calls:z.number(),statu
 const RECEIPT_SCHEMA=z.object({at:z.number(),bvid:z.string(),commentId:z.string(),status:z.enum(['uncertain','sent','cancelled']),reply:z.string(),replyId:z.string().optional()});
 
 export async function apply(ctx) {
-  const domain=await ctx.storageDomain.open({name:'bili_comment_reply',version:2,compatibleVersions:[1],
-    global:{schema:SETTINGS_SCHEMA,initial:structuredClone(DEFAULT_SETTINGS)},tables:{receipts:{valueSchema:RECEIPT_SCHEMA},drafts:{valueSchema:DRAFT_SCHEMA}}});
+  // 只增量添加字段和表，保留原格式；同时兼容1.2.0全新安装可能写下的v2文件。
+  const spec={name:'bili_comment_reply',version:1,
+    global:{schema:SETTINGS_SCHEMA,initial:structuredClone(DEFAULT_SETTINGS)},tables:{receipts:{valueSchema:RECEIPT_SCHEMA},drafts:{valueSchema:DRAFT_SCHEMA}}};
+  let domain;
+  try {domain=await ctx.storageDomain.open(spec);}
+  catch(error) {
+    if(error?.code!=='version-mismatch')throw error;
+    domain=await ctx.storageDomain.open({...spec,version:2});
+  }
   const table=domain.table('receipts');
   const modelSnapshot=()=>{
     const value=ctx.agentDefaultModel.currentSelection();
@@ -46,7 +53,7 @@ export async function apply(ctx) {
       if(closing) throw new Error('插件正在停止');
       if(!sharedActions.has(action) && !(caller==='ui' && userActions.has(action))) throw new Error('不支持的操作，开启自动发送及扫码授权仅限用户界面');
       switch(action) {
-        case 'status': return {version:'1.2.0',...engine.status(),model:modelSnapshot(),...generator.stats(),credentialConfigured:(await ctx.credentials.describe(COOKIE_REF)).configured};
+        case 'status': return {version:'1.2.1',...engine.status(),model:modelSnapshot(),...generator.stats(),credentialConfigured:(await ctx.credentials.describe(COOKIE_REF)).configured};
         case 'account': {const {account}=await engine.identity();return account;}
         case 'submissions': {
           const page=input?.page ?? 1;

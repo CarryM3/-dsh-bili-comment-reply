@@ -39,7 +39,7 @@ test('默认persona不需要关键词或默认答案即可保存并经UI确认�
   ownAccount(t);const f=await fixture();try{
     assert.ok(inject.includes('llm'));assert.ok(inject.includes('agentDefaultModel'));
     const saved=await f.configure();assert.equal(saved.settings.replyMode,'persona');assert.deepEqual(saved.settings.rules,[]);assert.equal(saved.settings.fallbackReply,'');
-    const before=await f.status();assert.equal(before.version,'1.2.0');assert.deepEqual(before.model,MODEL);assert.equal(before.todayGenerations,0);
+    const before=await f.status();assert.equal(before.version,'1.2.1');assert.deepEqual(before.model,MODEL);assert.equal(before.todayGenerations,0);
     assert.ok(!f.tool.parameters.properties.action.enum.includes('enable'));
     const result=await f.ui('enable',await approval(f));assert.equal(result.status,200);assert.equal(result.value.enabled,true);
     assert.equal(f.calls.length,1);assert.equal(f.streams.length,0,'开启仅校验模型，不生成');
@@ -97,7 +97,7 @@ test('v1 global默认迁移，旧去重仍在receipts，drafts不进入历史',a
   const initial={bvids:['BV1234567890'],rules:[],fallbackReply:'旧模板',pollSeconds:120,gapSeconds:60,dailyLimit:20};
   const comments=t.mock.method(BiliApi.prototype,'comments',async()=>({comments:[{id:'old',mid:'7',name:'合成评论者',message:'旧评论',replyCount:0}],end:true}));
   const f=await fixture({initial,receipts:[[key,old]]});try{
-    assert.equal(f.spec.version,2);assert.deepEqual(f.spec.compatibleVersions,[1]);assert.deepEqual(Object.keys(f.spec.tables).sort(),['drafts','receipts']);
+    assert.equal(f.spec.version,1);assert.equal(f.spec.compatibleVersions,undefined);assert.deepEqual(Object.keys(f.spec.tables).sort(),['drafts','receipts']);
     const status=await f.status();assert.deepEqual(status.settings,{...DEFAULT_SETTINGS,...initial});assert.equal(status.settings.replyMode,'persona');assert.equal(status.todayGenerations,0);
     await f.configure({...status.settings,persona:PERSONA.persona});await f.tool.execute({action:'sample',comment:'假评论'});
     const preview=await f.tool.execute({action:'preview'});assert.deepEqual(preview.candidates,[]);assert.equal(comments.mock.callCount(),1);assert.equal(f.calls.length,1,'旧receipt仍阻止重复生成');

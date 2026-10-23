@@ -15,7 +15,7 @@ async function fixture({authorized=false}={}) {
     llm:{prepareCall:async config=>({config,stream:async function*(){yield {type:'text-delta',index:0,text:JSON.stringify({action:'reply',reply:'通用测试草稿'})};yield {type:'finish',reason:{kind:'stop'}};}})},
     storageDomain:{open:async spec=>{
       assert.equal(spec.name,'bili_comment_reply');assert.match(spec.name,/^[a-z][a-z0-9_]*$/);
-      assert.equal(spec.version,2);assert.deepEqual(spec.compatibleVersions,[1]);
+      assert.equal(spec.version,1);assert.equal(spec.compatibleVersions,undefined);
       value=spec.global.schema.parse(structuredClone(spec.global.initial));
       return {global:{get:()=>value,set:async v=>{value=spec.global.schema.parse(v);}},table:name=>{
         assert.ok(spec.tables[name]);if(!tables.has(name))tables.set(name,new Map());const rows=tables.get(name);
