@@ -7,7 +7,7 @@ import {DEFAULT_SETTINGS} from './engine.js';
 const json=async path=>JSON.parse(await readFile(new URL(path,import.meta.url),'utf8'));
 test('插件信息在中文和英文DSH中均显示中文，发布包只包含运行文件',async()=>{
   const pkg=await json('./package.json');
-  assert.equal(pkg.version,'1.2.1');
+  assert.equal(pkg.version,'1.2.2');
   assert.equal(pkg.repository.url,'git+https://github.com/CarryM3/-dsh-bili-comment-reply.git');
   const en=await json('./locale/en.json');
   for(const locale of ['zh','zh-CN']) assert.deepEqual(await json(`./locale/${locale}.json`),en);

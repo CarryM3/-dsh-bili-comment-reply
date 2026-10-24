@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { BiliApi } from './bili-api.js';
 import { DEFAULT_SETTINGS, ReplyEngine } from './engine.js';
 import { createPersonaGenerator } from './persona-generator.js';
-import { createHash } from 'node:crypto';
+import { createHash,randomUUID } from 'node:crypto';
 
 export const inject = ['credentials','storageDomain','connection','tools','llm','agentDefaultModel'];
 export const Config = z.object({});
@@ -39,6 +39,7 @@ export async function apply(ctx) {
     store:{settings:()=>domain.global.get(),saveSettings:v=>domain.global.set(v),receipt:k=>table.get(k),
       entries:()=>[...table.entries()],put:(k,v)=>table.put(k,v)}});
   let qr=null,qrBusy=false,closing=false,timer,sampleController=null;
+  const confirmationEpoch=randomUUID();
   const pending=new Set();
   function track(promise) {
     pending.add(promise);
@@ -53,7 +54,7 @@ export async function apply(ctx) {
       if(closing) throw new Error('插件正在停止');
       if(!sharedActions.has(action) && !(caller==='ui' && userActions.has(action))) throw new Error('不支持的操作，开启自动发送及扫码授权仅限用户界面');
       switch(action) {
-        case 'status': return {version:'1.2.1',...engine.status(),model:modelSnapshot(),...generator.stats(),credentialConfigured:(await ctx.credentials.describe(COOKIE_REF)).configured};
+        case 'status': return {version:'1.2.2',confirmationEpoch,...engine.status(),model:modelSnapshot(),...generator.stats(),credentialConfigured:(await ctx.credentials.describe(COOKIE_REF)).configured};
         case 'account': {const {account}=await engine.identity();return account;}
         case 'submissions': {
           const page=input?.page ?? 1;

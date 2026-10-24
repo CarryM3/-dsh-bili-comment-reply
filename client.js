@@ -24,6 +24,7 @@ window.__ModuleLoader__.load({
         noPersona:'尚未导入角色设定，不能开启自动回复。',
         poll:'轮询间隔（秒）',gap:'发送间隔（秒）',limit:'每日尝试上限（北京时间）',
         confirm:'我确认提交标题、评论和角色设定给当前DSH默认模型并消耗额度，允许用AI生成结果回复已保存范围内的新评论；理解内容和平台风控风险。',
+        confirmHint:'关闭设置再进入保留有效勾选；取消勾选立即暂停。仅勾选不会开启，首次仍须点击下方按钮。',
         off:'已暂停',on:'自动回复中',unknown:'尚未登录',configured:'已保存凭证（加载投稿或检查账号时验证）',
         today:'今日发送尝试',history:'发送记录',empty:'暂无记录',candidates:'预览结果',
         scope:'AI每轮最多生成3次、预览3条，不适合回复的评论可跳过。预览包含历史评论，自动回复仅处理开启后的新评论，不补发历史。',
@@ -43,25 +44,44 @@ window.__ModuleLoader__.load({
         if(!response.ok||body.error)throw new Error(body.error||`服务请求失败（状态码 ${response.status}）`);
         return body.value;
       }
+      // 仅在本次页面会话保留确认，不写入浏览器持久存储或自动开启后台发送。
+      let rememberedConfirmation=null,rememberedAccount=null,rememberedWasEnabled=false;
+      const confirmationKey=s=>JSON.stringify([s.confirmationEpoch||s.version,s.settings,s.model,s.credentialConfigured]);
       function Panel() {
         const [state,setState]=React.useState(null),[form,setForm]=React.useState(null),[busy,setBusy]=React.useState(false);
         const [error,setError]=React.useState(''),[notice,setNotice]=React.useState(''),[qr,setQr]=React.useState(null);
-        const [account,setAccount]=React.useState(null),[confirm,setConfirm]=React.useState(false),[preview,setPreview]=React.useState(null);
+        const [account,setAccount]=React.useState(null),[confirm,setConfirmValue]=React.useState(false),[preview,setPreview]=React.useState(null);
         const [sampleComment,setSampleComment]=React.useState('这个角色好可爱，期待更多内容！'),[sampleReply,setSampleReply]=React.useState(null);
         const [catalog,setCatalog]=React.useState({items:[],page:0,total:null,end:false});
         const [catalogBusy,setCatalogBusy]=React.useState(false),[catalogError,setCatalogError]=React.useState('');
         React.useSyncExternalStore(fn=>ctx.locale.subscribe(fn),()=>ctx.locale.getSnapshot());
         const alive=React.useRef(true),catalogRequest=React.useRef(0),catalogMid=React.useRef(null);
+        function setConfirm(value) {rememberedConfirmation=value&&state?confirmationKey(state):null;setConfirmValue(value);}
+        function acceptStatus(s,reset=false) {
+          const key=confirmationKey(s);
+          if(reset||(!s.enabled&&rememberedWasEnabled)||!s.credentialConfigured||rememberedConfirmation!==key)rememberedConfirmation=null;
+          rememberedWasEnabled=!!s.enabled;
+          const checked=!!s.enabled||rememberedConfirmation===key;
+          if(s.enabled)rememberedConfirmation=key;
+          setState(s);setConfirmValue(checked);
+        }
+        async function toggleConfirmation(checked) {
+          setConfirm(checked);
+          if(!checked)await run('pause');
+        }
         async function loadSubmissions(page=1) {
           const request=++catalogRequest.current;
           setCatalogBusy(true);setCatalogError('');
           try {
             const value=await api('submissions',{page});
             if(!alive.current||request!==catalogRequest.current)return;
-            const changed=catalogMid.current!==null&&catalogMid.current!==value.account.mid;
+            const changed=(catalogMid.current??rememberedAccount)!==null&&(catalogMid.current??rememberedAccount)!==value.account.mid;
+            rememberedAccount=value.account.mid;
             if(changed) {
               setForm(s=>s?{...s,bvids:[]}:s);setConfirm(false);setPreview(null);
               setCatalog({items:[],page:0,total:null,end:false});
+              await api('pause');
+              const stopped=await api('status');if(!alive.current||request!==catalogRequest.current)return;acceptStatus(stopped,true);
               if(page!==1)throw new Error(t('accountChanged'));
             }
             catalogMid.current=value.account.mid;setAccount(value.account);
@@ -76,7 +96,7 @@ window.__ModuleLoader__.load({
           alive.current=true;
           api('status').then(s=>{
             if(!alive.current)return;
-            setState(s);setForm(s.settings);
+            acceptStatus(s);setForm(s.settings);
             if(s.credentialConfigured)loadSubmissions(1);
           }).catch(e=>{if(alive.current)setError(e.message);});
           return()=>{alive.current=false;catalogRequest.current++;};
@@ -88,7 +108,7 @@ window.__ModuleLoader__.load({
               const value=await api('loginPoll');if(!alive.current)return;
               if(value.account) {
                 setAccount(value.account);setQr(null);setConfirm(false);setNotice(t('ok'));
-                const s=await api('status');if(!alive.current)return;setState(s);await loadSubmissions(1);
+                const s=await api('status');if(!alive.current)return;acceptStatus(s,true);await loadSubmissions(1);
               }else setQr(q=>q?{...q,status:value.status}:q);
             }catch(e){if(alive.current){setError(e.message);setQr(null);}}
           },3000);
@@ -101,7 +121,7 @@ window.__ModuleLoader__.load({
           setConfirm(false);setPreview(null);setError('');
           if(state?.enabled) {
             setBusy(true);
-            try {await api('pause');if(!alive.current)return;setState(s=>({...s,enabled:false,message:t('selectionPaused')}));}
+            try {await api('pause');if(!alive.current)return;acceptStatus({...state,enabled:false,message:t('selectionPaused')},true);}
             catch(e){if(alive.current)setError(e.message);return;}
             finally {if(alive.current)setBusy(false);}
           }
@@ -115,13 +135,13 @@ window.__ModuleLoader__.load({
             if(action==='loginStart'){catalogRequest.current++;setCatalogBusy(false);setQr(value);}
             else if(action==='account')setAccount(value);
             else if(action==='logout') {
-              catalogRequest.current++;catalogMid.current=null;setCatalogBusy(false);setAccount(null);setQr(null);
+              catalogRequest.current++;catalogMid.current=null;rememberedAccount=null;setCatalogBusy(false);setAccount(null);setQr(null);
               setCatalog({items:[],page:0,total:null,end:false});setCatalogError('');change('bvids',[]);
             }else if(action==='preview')setPreview(value);
             else if(action==='sample')setSampleReply(value);
             else if(action==='configure'){setForm(value.settings);setNotice(t('saved'));setConfirm(false);setPreview(null);setSampleReply(null);}
-            const s=await api('status');if(alive.current){setState(s);if(JSON.stringify(s.model)!==JSON.stringify(state?.model))setConfirm(false);}
-          }catch(e){if(alive.current){setError(e.message);if(action==='enable')setConfirm(false);}}
+            const s=await api('status');if(alive.current)acceptStatus(s,['pause','configure','logout','loginStart'].includes(action));
+          }catch(e){if(alive.current){setError(e.message);if(action==='enable')setConfirm(false);if(action==='pause'){try{const s=await api('status');if(alive.current)acceptStatus(s,true);}catch{setConfirm(!!state?.enabled);}}}}
           finally {if(alive.current)setBusy(false);}
         }
         const button=(key,action,disabled=false)=>h('button',{type:'button',disabled,onClick:action},t(key));
@@ -166,8 +186,8 @@ window.__ModuleLoader__.load({
             field('sampleInput',h('textarea',{'aria-label':t('sampleInput'),value:sampleComment,maxLength:2000,onChange:e=>{setSampleComment(e.target.value);setSampleReply(null);}}),'sampleHint'),
             h('div',{className:'bcr-row'},button('sample',()=>run('sample',{comment:sampleComment}),blocked||dirty||state?.enabled||!state?.settings?.persona?.trim()||!sampleComment.trim())),
             h('p',null,`${t('savedSelection')}：${savedIds.length} ${t('unit')}；${t('personaName')}：${state?.settings?.personaName||'—'}`),
-            h('label',{className:'bcr-consent'},h('input',{type:'checkbox',checked:confirm,disabled:dirty||!savedIds.length||blocked||!state?.settings?.persona?.trim(),onChange:e=>setConfirm(e.target.checked)}),t('confirm')),
-            h('div',{className:'bcr-row'},button('enable',()=>run('enable',{confirmSelection:true,confirmAI:true,bvids:savedIds,settings:state.settings,model:state.model}),blocked||!confirm||!state?.credentialConfigured||dirty||!savedIds.length||!state?.settings?.persona?.trim())),h('p',null,t('note'))),
+            h('label',{className:'bcr-consent'},h('input',{type:'checkbox',checked:!!state?.enabled||confirm,disabled:busy||(!state?.enabled&&(dirty||!savedIds.length||catalogBusy||!state?.settings?.persona?.trim())),onChange:e=>toggleConfirmation(e.target.checked)}),t('confirm')),h('small',null,t('confirmHint')),
+            h('div',{className:'bcr-row'},button('enable',()=>run('enable',{confirmSelection:true,confirmAI:true,bvids:savedIds,settings:state.settings,model:state.model}),blocked||state?.enabled||!confirm||!state?.credentialConfigured||dirty||!savedIds.length||!state?.settings?.persona?.trim())),h('p',null,t('note'))),
           sampleReply&&h('div',{className:'bcr-card'},h('h3',null,t('sampleResult')),h('p',null,sampleReply.action==='skip'?t('sampleSkipped'):sampleReply.reply)),
           preview&&h('div',{className:'bcr-card'},h('h3',null,t('candidates')),h('p',null,t('scope')),preview.candidates?.length?preview.candidates.map(c=>h('div',{className:'bcr-item',key:c.key},h('strong',null,`${c.user} · ${c.bvid}`),h('p',null,c.comment),h('p',null,`→ ${c.reply}`))):h('p',null,preview.skipped||t('empty'))),
           h('div',{className:'bcr-card'},h('h3',null,t('history')),state?.history?.length?state.history.map(r=>h('div',{className:'bcr-item',key:r.key},h('strong',null,`${r.bvid} · ${t(r.status)}`),h('small',null,` · ${new Date(r.at).toLocaleString('zh-CN',{hour12:false})}`),h('p',null,r.reply))):h('p',null,t('empty'))));

@@ -35,11 +35,19 @@ function ownAccount(t){
 }
 async function approval(f){const {settings,model}=await f.status();return {confirmSelection:true,bvids:settings.bvids,settings,confirmAI:true,model};}
 
+test('确认实例标识在同一后台内稳定，重建后变化且不写设置',async()=>{
+  const a=await fixture(),b=await fixture();try{
+    const first=await a.status(),again=await a.status(),other=await b.status();
+    assert.equal(typeof first.confirmationEpoch,'string');assert.ok(first.confirmationEpoch);
+    assert.equal(first.confirmationEpoch,again.confirmationEpoch);assert.notEqual(first.confirmationEpoch,other.confirmationEpoch);
+    assert.equal(first.settings.confirmationEpoch,undefined);assert.equal(first.enabled,false);
+  }finally{await a.close();await b.close();}
+});
 test('默认persona不需要关键词或默认答案即可保存并经UI确认开启',async t=>{
   ownAccount(t);const f=await fixture();try{
     assert.ok(inject.includes('llm'));assert.ok(inject.includes('agentDefaultModel'));
     const saved=await f.configure();assert.equal(saved.settings.replyMode,'persona');assert.deepEqual(saved.settings.rules,[]);assert.equal(saved.settings.fallbackReply,'');
-    const before=await f.status();assert.equal(before.version,'1.2.1');assert.deepEqual(before.model,MODEL);assert.equal(before.todayGenerations,0);
+    const before=await f.status();assert.equal(before.version,'1.2.2');assert.deepEqual(before.model,MODEL);assert.equal(before.todayGenerations,0);
     assert.ok(!f.tool.parameters.properties.action.enum.includes('enable'));
     const result=await f.ui('enable',await approval(f));assert.equal(result.status,200);assert.equal(result.value.enabled,true);
     assert.equal(f.calls.length,1);assert.equal(f.streams.length,0,'开启仅校验模型，不生成');

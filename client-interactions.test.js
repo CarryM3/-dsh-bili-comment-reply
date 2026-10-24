@@ -9,10 +9,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT=true;
 const video=(bvid,title)=>({aid:'99',bvid,title,cover:'https://i0.hdslb.com/bfs/archive/fixture.jpg'});
 const first=[video('BV1234567890','我的第一条投稿'),video('BV1234567891','我的第二条投稿')];
 const last=video('BV1234567892','后续加载的投稿');
-async function mounted({enabled=false,saved=[],credentialConfigured=true,failure=false,persona='通用测试角色，亲切自然、回答简洁。'}={}) {
+async function mounted({enabled=false,saved=[],credentialConfigured=true,failure=false,pauseFailure=false,persona='通用测试角色，亲切自然、回答简洁。'}={}) {
   let module,Panel,renderer;
   const calls=[],settings=structuredClone({...DEFAULT_SETTINGS,bvids:saved,personaName:'通用测试角色',persona});
-  const state={version:'1.2.0',enabled,busy:false,settings,todayAttempts:0,todayGenerations:0,model:{provider:'fixture-provider',model:'fixture-model'},history:[],credentialConfigured};
+  const state={version:'1.2.2',confirmationEpoch:'fixture-runtime',enabled,busy:false,settings,todayAttempts:0,todayGenerations:0,model:{provider:'fixture-provider',model:'fixture-model'},history:[],credentialConfigured};
   const source=await readFile(new URL('./client.js',import.meta.url),'utf8');
   const context={window:{__ModuleLoader__:{load:v=>{module=v;}}},setTimeout,clearTimeout,console,
     fetch:async(_url,request)=>{
@@ -21,9 +21,9 @@ async function mounted({enabled=false,saved=[],credentialConfigured=true,failure
         case 'status':value=state;break;
         case 'submissions':
           if(failure)return {ok:false,status:400,json:async()=>({error:'B站登录已失效，请重新扫码'})};
-          value={items:body.input.page===1?first:[last],page:body.input.page,total:3,end:body.input.page===2,account:{mid:'42',name:'作者'}};break;
+          value={items:body.input.page===1?first:[last],page:body.input.page,total:3,end:body.input.page===2,account:{mid:state.accountMid||'42',name:'作者'}};break;
         case 'configure':state.settings=structuredClone(body.input);state.enabled=false;value=state;break;
-        case 'pause':state.enabled=false;value=state;break;
+        case 'pause':if(pauseFailure)return {ok:false,status:400,json:async()=>({error:'暂停失败，请重试'})};state.enabled=false;value=state;break;
         case 'sample':state.todayGenerations++;value={action:'reply',reply:'谢谢喜欢，会继续认真做内容。',source:'ai',provider:'fixture-provider',model:'fixture-model',cached:false,called:true};break;
         case 'enable':assert.equal(body.input.confirmSelection,true);assert.equal(body.input.confirmAI,true);assert.deepEqual(body.input.model,state.model);assert.deepEqual(body.input.bvids,state.settings.bvids);assert.deepEqual(body.input.settings,state.settings);state.enabled=true;value=state;break;
         default:throw new Error(`测试不允许的操作${body.action}`);
@@ -42,7 +42,7 @@ async function mounted({enabled=false,saved=[],credentialConfigured=true,failure
   const button=label=>root().findAllByType('button').find(v=>v.children.join('')===label);
   const choice=title=>root().findByProps({'aria-label':`选择稿件：${title}`});
   const consent=()=>root().findAllByType('input').find(v=>v.props.type==='checkbox'&&!v.props['aria-label']);
-  return {calls,state,root,button,choice,consent,async click(label){const b=button(label);assert.ok(b,`按钮${label}应存在`);assert.equal(b.props.disabled,false);await act(async()=>{await b.props.onClick();});},async choose(title,checked){await act(async()=>{await choice(title).props.onChange({target:{checked}});});},async close(){await act(async()=>renderer.unmount());}};
+  return {calls,state,root,button,choice,consent,async reopen(){await act(async()=>renderer.unmount());await act(async()=>{renderer=TestRenderer.create(React.createElement(Panel));});},async click(label){const b=button(label);assert.ok(b,`按钮${label}应存在`);assert.equal(b.props.disabled,false);await act(async()=>{await b.props.onClick();});},async choose(title,checked){await act(async()=>{await choice(title).props.onChange({target:{checked}});});},async close(){await act(async()=>renderer.unmount());}};
 }
 test('扫码凭证存在时自动加载标题和封面，初次加载不勾选、不保存、不开启',async()=>{
   const f=await mounted();
@@ -114,6 +114,59 @@ test('角色设定未配置时不能试聊或开启，默认模型变化清除�
     assert.equal(f.consent().props.checked,false);
     assert.equal(f.button('确认开启所选稿件自动回复').props.disabled,true);
   }finally {await f.close();}
+});
+test('仅勾选后关闭重进保留确认，但不隐式开启',async()=>{
+  const f=await mounted({saved:first.map(v=>v.bvid)});try{
+    await act(async()=>f.consent().props.onChange({target:{checked:true}}));await f.reopen();
+    assert.equal(f.consent().props.checked,true);assert.equal(f.state.enabled,false);assert.ok(!f.calls.some(v=>v.action==='enable'));
+    await act(async()=>f.consent().props.onChange({target:{checked:false}}));await f.reopen();assert.equal(f.consent().props.checked,false);
+  }finally{await f.close();}
+});
+test('已开启重进显示勾选，取消勾选立即暂停且重进不再勾选',async()=>{
+  const f=await mounted({enabled:true,saved:first.map(v=>v.bvid)});try{
+    assert.equal(f.consent().props.checked,true);assert.equal(f.button('确认开启所选稿件自动回复').props.disabled,true);
+    await f.reopen();assert.equal(f.consent().props.checked,true);
+    await act(async()=>{await f.consent().props.onChange({target:{checked:false}});});
+    assert.equal(f.state.enabled,false);assert.equal(f.calls.filter(v=>v.action==='pause').length,1);
+    await f.reopen();assert.equal(f.consent().props.checked,false);assert.ok(!f.calls.some(v=>v.action==='enable'));
+  }finally{await f.close();}
+});
+for(const field of ['settings','model','confirmationEpoch','accountMid'])test(`关闭期间${field}变化使旧勾选失效`,async()=>{
+  const f=await mounted({saved:first.map(v=>v.bvid)});try{
+    await act(async()=>f.consent().props.onChange({target:{checked:true}}));
+    if(field==='settings')f.state.settings={...f.state.settings,persona:'另一份通用角色'};
+    if(field==='model')f.state.model={...f.state.model,model:'changed'};
+    if(field==='confirmationEpoch')f.state.confirmationEpoch='new-runtime';
+    if(field==='accountMid')f.state.accountMid='84';
+    await f.reopen();assert.equal(f.consent().props.checked,false);assert.ok(!f.calls.some(v=>v.action==='enable'));
+  }finally{await f.close();}
+});
+test('运行中改选暂停后恢复原稿件并重新确认，重进仍保留新确认',async()=>{
+  const f=await mounted({enabled:true,saved:[first[0].bvid]});try{
+    await f.choose(first[1].title,true);await f.choose(first[1].title,false);
+    await act(async()=>f.consent().props.onChange({target:{checked:true}}));
+    await f.reopen();assert.equal(f.consent().props.checked,true);assert.equal(f.state.enabled,false);
+    assert.ok(!f.calls.some(v=>v.action==='enable'));
+  }finally{await f.close();}
+});
+test('后台已暂停时重进不恢复旧的运行勾选',async()=>{
+  const f=await mounted({enabled:true,saved:first.map(v=>v.bvid)});try{
+    f.state.enabled=false;await f.reopen();assert.equal(f.consent().props.checked,false);
+  }finally{await f.close();}
+});
+test('即使本页状态过期，取消勾选也向后台请求暂停',async()=>{
+  const f=await mounted({saved:first.map(v=>v.bvid)});try{
+    await act(async()=>f.consent().props.onChange({target:{checked:true}}));
+    f.state.enabled=true;
+    await act(async()=>{await f.consent().props.onChange({target:{checked:false}});});
+    assert.equal(f.state.enabled,false);assert.equal(f.calls.filter(v=>v.action==='pause').length,1);assert.equal(f.consent().props.checked,false);
+  }finally{await f.close();}
+});
+test('取消暂停请求失败明确报错，并保持实际运行勾选',async()=>{
+  const f=await mounted({enabled:true,saved:first.map(v=>v.bvid),pauseFailure:true});try{
+    await act(async()=>{await f.consent().props.onChange({target:{checked:false}});});
+    assert.equal(f.state.enabled,true);assert.equal(f.consent().props.checked,true);assert.ok(f.root().findAllByProps({role:'alert'}).length);
+  }finally{await f.close();}
 });
 test('投稿加载失败明确提示且不静默开启，没有凭证时不请求投稿',async()=>{
   const failed=await mounted({failure:true});

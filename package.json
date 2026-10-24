@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-bili-comment-reply",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "type": "module",
   "description": "B站角色AI评论助手：根据评论及本机人设生成回复，使用DSH默认模型，无需关键词模板",
